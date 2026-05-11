@@ -1,0 +1,17 @@
+{
+  "name": "loa-share",
+  "version": "0.1.0",
+  "description": "로스트아크 레이드 데미지 실시간 공유 + 디스코드 박제",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
