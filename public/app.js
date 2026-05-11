@@ -444,22 +444,33 @@ async function captureAndOcr() {
   upCtx.drawImage(canvas, 0, 0, upCanvas.width, upCanvas.height);
 
   const imgData = upCtx.getImageData(0, 0, upCanvas.width, upCanvas.height);
-  // 1차: 평균 밝기 계산해서 적응형 임계값
-  let totalBright = 0;
-  for (let i = 0; i < imgData.data.length; i += 4) {
-    totalBright += (imgData.data[i] * 0.3 + imgData.data[i + 1] * 0.59 + imgData.data[i + 2] * 0.11);
-  }
-  const avgBright = totalBright / (imgData.data.length / 4);
-  // 적응형 임계값: 평균보다 약간 위쪽 (글자가 평균보다 밝다고 가정)
-  const threshold = Math.max(80, Math.min(160, avgBright * 0.85));
 
-  // ⭐ 이진화 + 반전 (Tesseract는 흰 배경에 검은 글자를 훨씬 잘 읽음)
-  // 게임 화면은 보통 어두운 배경에 밝은 숫자 → 반전 필요
+  // ⭐ 이진화 대신 그레이스케일 + 대비 강화 + 반전
+  // 게임 화면의 어중간한 색상 숫자도 살리려면 이진화는 너무 공격적
+  // → 부드러운 그레이스케일 + 색상 반전(검은 배경 → 흰 배경) + 대비만 강화
+
+  // 1단계: 평균과 표준편차 계산 (대비 조정용)
+  let sum = 0;
+  let count = imgData.data.length / 4;
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    sum += (imgData.data[i] * 0.3 + imgData.data[i + 1] * 0.59 + imgData.data[i + 2] * 0.11);
+  }
+  const mean = sum / count;
+
+  // 2단계: 그레이스케일 + 반전 + 대비 강화
+  // 게임 글자는 보통 평균보다 밝음 → 반전 후 평균보다 어두워짐
+  // 대비를 2배로 늘려서 글자를 더 진하게
+  const CONTRAST = 2.2;
+
   for (let i = 0; i < imgData.data.length; i += 4) {
     const r = imgData.data[i], g = imgData.data[i + 1], b = imgData.data[i + 2];
     let v = (r * 0.3 + g * 0.59 + b * 0.11);
-    // 밝은 픽셀(글자)을 검정으로, 어두운 픽셀(배경)을 흰색으로 반전
-    v = v < threshold ? 255 : 0;
+    // 반전: 밝은 픽셀 → 어두운 픽셀
+    v = 255 - v;
+    // 대비 강화: 평균 기준으로 멀어지게
+    const invMean = 255 - mean;
+    v = invMean + (v - invMean) * CONTRAST;
+    v = Math.max(0, Math.min(255, v));
     imgData.data[i] = imgData.data[i + 1] = imgData.data[i + 2] = v;
   }
   upCtx.putImageData(imgData, 0, 0);
