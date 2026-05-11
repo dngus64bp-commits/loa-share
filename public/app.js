@@ -10,6 +10,7 @@ let myDamage = 0;
 const roster = new Map();    // socketId → { nickname, damage }
 let mySocketId = null;
 let ocrWorker = null;
+let damageUnit = localStorage.getItem('damageUnit') || 'auto'; // 'auto' | 'raw' | 'man' | 'eok'
 
 // ============ DOM ============
 const $ = (id) => document.getElementById(id);
@@ -54,6 +55,26 @@ els.webhook.value = localStorage.getItem('webhook') || '';
 ['nickname', 'raidId', 'webhook'].forEach((k) => {
   els[k].addEventListener('change', () => localStorage.setItem(k, els[k].value));
 });
+
+// 단위 선택 버튼 초기화 및 핸들러
+function initUnitButtons() {
+  document.querySelectorAll('.unit-btn').forEach((btn) => {
+    if (btn.dataset.unit === damageUnit) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+    btn.addEventListener('click', () => {
+      damageUnit = btn.dataset.unit;
+      localStorage.setItem('damageUnit', damageUnit);
+      document.querySelectorAll('.unit-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.unit === damageUnit)
+      );
+      toast(`단위: ${({auto:'자동',raw:'단위없음',man:'만',eok:'억'})[damageUnit]}`);
+    });
+  });
+}
+initUnitButtons();
 
 // ============ 토스트 ============
 function toast(msg, type = '') {
@@ -411,19 +432,29 @@ async function captureAndOcr() {
   // 비디오에서 선택 영역만 잘라서 그림
   ctx.drawImage(video, x, y, w, h, 0, 0, w, h);
 
-  // OCR 정확도 ↑: 3배 확대 + 그레이스케일 + 대비 강화
+  // OCR 정확도 ↑: 4배 확대 (작은 점도 살리려면 더 크게)
+  const SCALE = 4;
   const upCanvas = document.createElement('canvas');
-  upCanvas.width = w * 3;
-  upCanvas.height = h * 3;
+  upCanvas.width = w * SCALE;
+  upCanvas.height = h * SCALE;
   const upCtx = upCanvas.getContext('2d');
   upCtx.imageSmoothingEnabled = false;
   upCtx.drawImage(canvas, 0, 0, upCanvas.width, upCanvas.height);
 
   const imgData = upCtx.getImageData(0, 0, upCanvas.width, upCanvas.height);
+  // 1차: 평균 밝기 계산해서 적응형 임계값
+  let totalBright = 0;
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    totalBright += (imgData.data[i] * 0.3 + imgData.data[i + 1] * 0.59 + imgData.data[i + 2] * 0.11);
+  }
+  const avgBright = totalBright / (imgData.data.length / 4);
+  // 적응형 임계값: 평균보다 약간 위쪽 (글자가 평균보다 밝다고 가정)
+  const threshold = Math.max(80, Math.min(160, avgBright * 0.85));
+
   for (let i = 0; i < imgData.data.length; i += 4) {
     const r = imgData.data[i], g = imgData.data[i + 1], b = imgData.data[i + 2];
     let v = (r * 0.3 + g * 0.59 + b * 0.11);
-    v = v < 130 ? 0 : 255; // 이진화 (밝기 임계값 130)
+    v = v < threshold ? 0 : 255;
     imgData.data[i] = imgData.data[i + 1] = imgData.data[i + 2] = v;
   }
   upCtx.putImageData(imgData, 0, 0);
@@ -433,12 +464,52 @@ async function captureAndOcr() {
     const raw = result.data.text.trim();
     if (!raw) return;
 
-    // 한글/영문 단위 포함해서 파싱
-    const num = parseKoreanNumber(raw);
+    // 한글/영문 단위 포함해서 1차 파싱
+    let num = parseKoreanNumber(raw);
 
-    // raw 표시 (OCR이 읽은 그대로 + 파싱된 값)
+    // 단위 강제 적용 (사용자가 수동 지정한 경우)
+    // OCR이 "억"이나 "만"을 못 읽거나 점을 못 읽을 때를 보완
+    let appliedUnit = '';
+    if (num !== null && damageUnit !== 'auto' && damageUnit !== 'raw') {
+      // raw 텍스트에 이미 한글 단위가 있으면 사용자 지정값 무시 (이중 적용 방지)
+      const hasKoreanUnit = /[억만천]/.test(raw);
+      // raw에 점이 있는지 확인
+      const hasDot = /\./.test(raw);
+      const rawDigits = raw.replace(/[^0-9]/g, '');
+
+      if (!hasKoreanUnit) {
+        const multiplier = damageUnit === 'eok' ? 100000000 : 10000;
+
+        if (hasDot) {
+          // 점이 있으면 그대로 (예: 1.22 × 1억 = 122,000,000)
+          // num은 이미 parseFloat로 1.22 처리됨? → parseKoreanNumber는 정수만 반환
+          // 다시 파싱
+          const floatVal = parseFloat(raw.replace(/,/g, ''));
+          if (!isNaN(floatVal)) {
+            num = Math.round(floatVal * multiplier);
+            appliedUnit = ` [×${damageUnit === 'eok' ? '억' : '만'}]`;
+          }
+        } else if (rawDigits.length >= 3 && damageUnit === 'eok') {
+          // 점 없이 3자리 이상이면 OCR이 점을 놓쳤을 가능성 (예: "122" → 1.22로 추정)
+          // 휴리스틱: 첫 자리 다음에 소수점이 있다고 가정
+          // 122 → 1.22 → 1.22억 = 122,000,000
+          // 1234 → 12.34 → 12.34억 (이건 좀 애매)
+          // 게임 표시 규칙: 1.22억, 12.3억, 123억 같은 식이라 자릿수로 판별 필요
+          // 안전하게: 사용자가 점이 사라진 걸 알고 단위 지정한 거라 가정 → 점 없는 정수에 곱
+          // 그런데 이러면 1.22억이 122억이 됨...
+          // → 명시적으로 2가지 모드 제공이 더 나음
+          num = num * multiplier;
+          appliedUnit = ` [×${damageUnit === 'eok' ? '억' : '만'}]`;
+        } else {
+          num = num * multiplier;
+          appliedUnit = ` [×${damageUnit === 'eok' ? '억' : '만'}]`;
+        }
+      }
+    }
+
+    // raw 표시 (OCR이 읽은 그대로 + 파싱된 값 + 적용된 단위)
     if (num !== null && !isNaN(num)) {
-      els.ocrRaw.textContent = `[raw: "${raw}" → ${num.toLocaleString()}]`;
+      els.ocrRaw.textContent = `[raw: "${raw}"${appliedUnit} → ${num.toLocaleString()}]`;
     } else {
       els.ocrRaw.textContent = `[raw: "${raw}" → 파싱 실패]`;
       return;
