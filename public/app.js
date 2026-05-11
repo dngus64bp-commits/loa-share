@@ -33,6 +33,18 @@ const els = {
   statusDot: $('statusDot'),
   statusText: $('statusText'),
   toast: $('toast'),
+  // ===== 모달 요소 =====
+  selectionModal: $('selectionModal'),
+  modalVideo: $('modalVideo'),
+  modalCapture: $('modalCapture'),
+  modalSelectionLayer: $('modalSelectionLayer'),
+  modalClose: $('modalClose'),
+  modalCancel: $('modalCancel'),
+  modalConfirm: $('modalConfirm'),
+  modalInfo: $('modalInfo'),
+  modalZoom: $('modalZoom'),
+  modalZoomCanvas: $('modalZoomCanvas'),
+  modalZoomSize: $('modalZoomSize'),
 };
 
 // localStorage에서 이전 입력 복원
@@ -82,85 +94,216 @@ els.btnShareScreen.addEventListener('click', async () => {
   }
 });
 
-// ============ 데미지 영역 선택 ============
-let isSelecting = false;
-let selStart = null;
-let selBox = null;
+// ============ 데미지 영역 선택 (모달) ============
+let modalIsSelecting = false;
+let modalSelStart = null;
+let modalSelBox = null;
+let modalCurrentRect = null; // 모달에서 현재 그려진 영역
 
+// "큰 화면으로 영역 선택" 버튼 → 모달 열기
 els.btnSelectArea.addEventListener('click', () => {
   if (!stream) return;
-  els.captureArea.classList.add('selecting');
-  toast('전투분석기의 내 데미지 숫자를 좁게 드래그하세요');
+  openSelectionModal();
 });
 
-els.selectionOverlay.addEventListener('mousedown', (e) => {
-  isSelecting = true;
-  const rect = els.selectionOverlay.getBoundingClientRect();
-  selStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+function openSelectionModal() {
+  // 모달 비디오에 현재 스트림 연결
+  els.modalVideo.srcObject = stream;
+  els.selectionModal.classList.add('show');
 
-  if (selBox) selBox.remove();
-  selBox = document.createElement('div');
-  selBox.className = 'selection-box';
-  selBox.style.left = selStart.x + 'px';
-  selBox.style.top = selStart.y + 'px';
-  els.selectionOverlay.appendChild(selBox);
+  // 이전 선택이 있으면 모달 안에도 표시
+  if (selectedRect) {
+    setTimeout(() => restorePreviousSelection(), 100);
+  } else {
+    els.modalConfirm.disabled = true;
+    els.modalInfo.textContent = '드래그하여 영역을 선택하세요';
+    if (modalSelBox) { modalSelBox.remove(); modalSelBox = null; }
+    modalCurrentRect = null;
+    els.modalZoom.classList.remove('show');
+  }
+}
+
+function closeSelectionModal() {
+  els.selectionModal.classList.remove('show');
+  els.modalVideo.srcObject = null;
+}
+
+// 이전 선택 복원
+function restorePreviousSelection() {
+  if (!selectedRect || !els.modalVideo.videoWidth) return;
+  const video = els.modalVideo;
+  const videoRect = video.getBoundingClientRect();
+  const layerRect = els.modalSelectionLayer.getBoundingClientRect();
+  const scaleX = layerRect.width / video.videoWidth;
+  const scaleY = layerRect.height / video.videoHeight;
+
+  if (modalSelBox) modalSelBox.remove();
+  modalSelBox = document.createElement('div');
+  modalSelBox.className = 'modal-selection-box';
+  modalSelBox.style.left = (selectedRect.x * scaleX) + 'px';
+  modalSelBox.style.top = (selectedRect.y * scaleY) + 'px';
+  modalSelBox.style.width = (selectedRect.w * scaleX) + 'px';
+  modalSelBox.style.height = (selectedRect.h * scaleY) + 'px';
+  els.modalSelectionLayer.appendChild(modalSelBox);
+  modalCurrentRect = { x: selectedRect.x, y: selectedRect.y, w: selectedRect.w, h: selectedRect.h };
+  els.modalConfirm.disabled = false;
+  els.modalInfo.innerHTML = `이전 선택 영역 · <b>${selectedRect.w} × ${selectedRect.h}px</b>`;
+  updateZoomPreview();
+}
+
+// 모달 닫기 핸들러
+els.modalClose.addEventListener('click', closeSelectionModal);
+els.modalCancel.addEventListener('click', closeSelectionModal);
+els.selectionModal.addEventListener('click', (e) => {
+  if (e.target === els.selectionModal) closeSelectionModal();
 });
 
-els.selectionOverlay.addEventListener('mousemove', (e) => {
-  if (!isSelecting || !selBox) return;
-  const rect = els.selectionOverlay.getBoundingClientRect();
+// ESC로 모달 닫기
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && els.selectionModal.classList.contains('show')) {
+    closeSelectionModal();
+  }
+});
+
+// 모달 안에서 드래그 → 영역 선택
+els.modalSelectionLayer.addEventListener('mousedown', (e) => {
+  modalIsSelecting = true;
+  const rect = els.modalSelectionLayer.getBoundingClientRect();
+  modalSelStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+  if (modalSelBox) modalSelBox.remove();
+  modalSelBox = document.createElement('div');
+  modalSelBox.className = 'modal-selection-box';
+  modalSelBox.style.left = modalSelStart.x + 'px';
+  modalSelBox.style.top = modalSelStart.y + 'px';
+  modalSelBox.style.width = '0px';
+  modalSelBox.style.height = '0px';
+  els.modalSelectionLayer.appendChild(modalSelBox);
+  e.preventDefault();
+});
+
+els.modalSelectionLayer.addEventListener('mousemove', (e) => {
+  if (!modalIsSelecting || !modalSelBox) return;
+  const rect = els.modalSelectionLayer.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  const left = Math.min(selStart.x, x);
-  const top = Math.min(selStart.y, y);
-  const w = Math.abs(x - selStart.x);
-  const h = Math.abs(y - selStart.y);
-  selBox.style.left = left + 'px';
-  selBox.style.top = top + 'px';
-  selBox.style.width = w + 'px';
-  selBox.style.height = h + 'px';
+  const left = Math.min(modalSelStart.x, x);
+  const top = Math.min(modalSelStart.y, y);
+  const w = Math.abs(x - modalSelStart.x);
+  const h = Math.abs(y - modalSelStart.y);
+  modalSelBox.style.left = left + 'px';
+  modalSelBox.style.top = top + 'px';
+  modalSelBox.style.width = w + 'px';
+  modalSelBox.style.height = h + 'px';
+
+  // 실시간 정보 업데이트
+  const video = els.modalVideo;
+  const scaleX = video.videoWidth / rect.width;
+  const scaleY = video.videoHeight / rect.height;
+  const realW = Math.round(w * scaleX);
+  const realH = Math.round(h * scaleY);
+  els.modalInfo.innerHTML = `선택 중 · <b>${realW} × ${realH}px</b>`;
 });
 
-els.selectionOverlay.addEventListener('mouseup', (e) => {
-  if (!isSelecting) return;
-  isSelecting = false;
-  const rect = els.selectionOverlay.getBoundingClientRect();
+els.modalSelectionLayer.addEventListener('mouseup', (e) => {
+  if (!modalIsSelecting) return;
+  modalIsSelecting = false;
+  const rect = els.modalSelectionLayer.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  const left = Math.min(selStart.x, x);
-  const top = Math.min(selStart.y, y);
-  const w = Math.abs(x - selStart.x);
-  const h = Math.abs(y - selStart.y);
+  const left = Math.min(modalSelStart.x, x);
+  const top = Math.min(modalSelStart.y, y);
+  const w = Math.abs(x - modalSelStart.x);
+  const h = Math.abs(y - modalSelStart.y);
 
-  if (w < 10 || h < 6) {
-    toast('영역이 너무 작아요. 다시 선택하세요', 'error');
-    if (selBox) selBox.remove();
-    selBox = null;
+  if (w < 5 || h < 5) {
+    if (modalSelBox) modalSelBox.remove();
+    modalSelBox = null;
+    els.modalConfirm.disabled = true;
+    els.modalInfo.textContent = '영역이 너무 작아요. 다시 드래그하세요';
+    els.modalZoom.classList.remove('show');
     return;
   }
 
   // 비디오 실제 해상도 기준 좌표로 변환
-  const video = els.video;
+  const video = els.modalVideo;
   const scaleX = video.videoWidth / rect.width;
   const scaleY = video.videoHeight / rect.height;
-  selectedRect = {
+  modalCurrentRect = {
     x: Math.round(left * scaleX),
     y: Math.round(top * scaleY),
     w: Math.round(w * scaleX),
     h: Math.round(h * scaleY),
-    // 표시용 (비율로 저장하면 패널 크기 바뀌어도 유지됨)
-    pctLeft: left / rect.width,
-    pctTop: top / rect.height,
-    pctWidth: w / rect.width,
-    pctHeight: h / rect.height,
   };
 
-  // 선택 박스를 저장된 모양으로 전환
-  selBox.className = 'saved-box';
-  els.captureArea.classList.remove('selecting');
-  els.btnStart.disabled = false;
+  els.modalConfirm.disabled = false;
+  els.modalInfo.innerHTML = `선택 완료 · <b>${modalCurrentRect.w} × ${modalCurrentRect.h}px</b> · 확정 버튼을 누르세요`;
+  updateZoomPreview();
+});
 
-  toast('영역이 선택되었습니다. 공유를 시작하세요', 'success');
+// 확대 미리보기 갱신 (선택한 영역만 크게 보여줌)
+function updateZoomPreview() {
+  if (!modalCurrentRect) return;
+  const { x, y, w, h } = modalCurrentRect;
+  const video = els.modalVideo;
+  if (!video.videoWidth) return;
+
+  const canvas = els.modalZoomCanvas;
+  // 미리보기는 영역을 4배 확대해서 표시 (최소 가로 220px 유지)
+  const scale = Math.max(4, 220 / w);
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(video, x, y, w, h, 0, 0, canvas.width, canvas.height);
+
+  els.modalZoomSize.textContent = `${w} × ${h}px (×${scale.toFixed(1)} 확대)`;
+  els.modalZoom.classList.add('show');
+
+  // 1초마다 자동 갱신 (게임이 움직이는 동안 확인 가능)
+  clearInterval(updateZoomPreview._t);
+  updateZoomPreview._t = setInterval(() => {
+    if (!els.selectionModal.classList.contains('show') || !modalCurrentRect) {
+      clearInterval(updateZoomPreview._t);
+      return;
+    }
+    const c = els.modalZoomCanvas.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    c.drawImage(video, modalCurrentRect.x, modalCurrentRect.y, modalCurrentRect.w, modalCurrentRect.h,
+                0, 0, els.modalZoomCanvas.width, els.modalZoomCanvas.height);
+  }, 800);
+}
+
+// 확정 버튼 → 본문에 적용
+els.modalConfirm.addEventListener('click', () => {
+  if (!modalCurrentRect) return;
+
+  selectedRect = {
+    x: modalCurrentRect.x,
+    y: modalCurrentRect.y,
+    w: modalCurrentRect.w,
+    h: modalCurrentRect.h,
+  };
+
+  // 작은 미리보기에도 표시 (참고용)
+  const video = els.video;
+  const captureRect = els.captureArea.getBoundingClientRect();
+  const scaleX = captureRect.width / video.videoWidth;
+  const scaleY = captureRect.height / video.videoHeight;
+
+  // 기존 작은 박스 제거 후 새로 그림
+  els.captureArea.querySelectorAll('.saved-box').forEach(b => b.remove());
+  const smallBox = document.createElement('div');
+  smallBox.className = 'saved-box';
+  smallBox.style.left = (selectedRect.x * scaleX) + 'px';
+  smallBox.style.top = (selectedRect.y * scaleY) + 'px';
+  smallBox.style.width = (selectedRect.w * scaleX) + 'px';
+  smallBox.style.height = (selectedRect.h * scaleY) + 'px';
+  els.captureArea.appendChild(smallBox);
+
+  els.btnStart.disabled = false;
+  closeSelectionModal();
+  toast(`영역 설정 완료 (${selectedRect.w} × ${selectedRect.h}px)`, 'success');
 });
 
 // ============ OCR ============
