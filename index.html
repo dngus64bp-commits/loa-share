@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOA-SHARE · 로스트아크 레이드 데미지 공유</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #0a0807;
+    --bg-panel: #15110d;
+    --bg-elev: #1d1813;
+    --border: #2a2218;
+    --gold: #c9a96e;
+    --gold-bright: #e8c989;
+    --gold-dim: #6b5938;
+    --text: #e8e3d8;
+    --text-dim: #8a8275;
+    --danger: #a64545;
+    --success: #6e9259;
+    --rank-1: #ffd76b;
+    --rank-2: #d6d6d6;
+    --rank-3: #c98456;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(201, 169, 110, 0.06), transparent 50%),
+      radial-gradient(circle at 80% 90%, rgba(201, 169, 110, 0.04), transparent 50%);
+    overflow-x: hidden;
+  }
+
+  /* 노이즈 텍스처 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.4;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.05 0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .app {
+    position: relative;
+    z-index: 2;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px 32px 60px;
+  }
+
+  /* 헤더 */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 18px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .logo-mark {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--gold-bright), var(--gold-dim));
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+    position: relative;
+  }
+  .logo-mark::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    background: var(--bg-deep);
+    clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+  }
+  .logo h1 {
+    font-family: 'Cinzel', serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--gold-bright);
+  }
+  .logo .tag {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    box-shadow: 0 0 8px currentColor;
+  }
+  .dot.on { background: var(--success); }
+
+  /* 메인 그리드 */
+  .grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 28px;
+  }
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  /* 패널 공통 */
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    position: relative;
+  }
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 20px; right: 20px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+  }
+  .panel-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-family: 'Cinzel', serif;
+    font-size: 13px;
+    letter-spacing: 3px;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  .panel-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--gold-dim);
+  }
+  .panel-body { padding: 20px; }
+
+  /* 입력 */
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 14px;
+    border-radius: 2px;
+    transition: border-color 0.2s;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--gold-dim);
+  }
+
+  /* 버튼 */
+  .btn {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--gold-dim);
+    background: transparent;
+    color: var(--gold);
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn:hover:not(:disabled) {
+    background: rgba(201, 169, 110, 0.08);
+    border-color: var(--gold);
+    color: var(--gold-bright);
+  }
+  .btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  .btn.primary {
+    background: linear-gradient(180deg, var(--gold), var(--gold-dim));
+    color: var(--bg-deep);
+    border-color: var(--gold);
+    font-weight: 700;
+  }
+  .btn.primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, var(--gold-bright), var(--gold));
+    color: var(--bg-deep);
+  }
+  .btn.danger {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+  .btn.danger:hover:not(:disabled) {
+    background: rgba(166, 69, 69, 0.1);
+  }
+
+  /* 화면 캡처 미리보기 */
+  .capture-area {
+    background: var(--bg-deep);
+    border: 1px dashed var(--border);
+    border-radius: 2px;
+    aspect-ratio: 16/9;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  .capture-area video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+  }
+  .capture-area.active video { display: block; }
+  .capture-area.active .placeholder { display: none; }
+  .capture-area canvas { display: none; }
+
+  /* 영역 선택 오버레이 */
+  .selection-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: crosshair;
+    display: none;
+  }
+  .capture-area.selecting .selection-overlay { display: block; }
+  .selection-box {
+    position: absolute;
+    border: 2px solid var(--gold-bright);
+    background: rgba(201, 169, 110, 0.15);
+    pointer-events: none;
+  }
+  .saved-box {
+    position: absolute;
+    border: 1.5px dashed var(--gold);
+    pointer-events: none;
+  }
+
+  /* ===== 영역 선택 모달 ===== */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .modal-overlay.show { display: flex; }
+
+  .modal {
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    border-radius: 4px;
+    max-width: 1600px;
+    width: 100%;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+  }
+  .modal::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 30px; right: 30px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  }
+
+  .modal-head {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .modal-title {
+    font-family: 'Cinzel', serif;
+    font-size: 15px;
+    letter-spacing: 3px;
+    color: var(--gold-bright);
+    text-transform: uppercase;
+  }
+  .modal-hint {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .modal-close {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition: all 0.2s;
+  }
+  .modal-close:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  .modal-body {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-deep);
+    min-height: 0;
+  }
+
+  .modal-capture {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+    max-height: 100%;
+    line-height: 0;
+  }
+  .modal-capture video {
+    display: block;
+    max-width: 100%;
+    max-height: calc(95vh - 200px);
+    object-fit: contain;
+    background: #000;
+  }
+  .modal-selection-layer {
+    position: absolute;
+    inset: 0;
+    cursor: crosshair;
+  }
+  .modal-selection-box {
+    position: absolute;
+    border: 2px solid var(--gold-bright);
+    background: rgba(201, 169, 110, 0.2);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+  }
+
+  /* 확대 미리보기 (선택 영역만) */
+  .modal-zoom {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 240px;
+    background: var(--bg-panel);
+    border: 1px solid var(--gold-dim);
+    padding: 10px;
+    z-index: 10;
+    display: none;
+  }
+  .modal-zoom.show { display: block; }
+  .modal-zoom-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    font-family: 'Cinzel', serif;
+  }
+  .modal-zoom canvas {
+    width: 100%;
+    height: auto;
+    display: block;
+    image-rendering: pixelated;
+    background: #000;
+    border: 1px solid var(--border);
+  }
+  .modal-zoom-size {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+  }
+
+  .modal-foot {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .modal-foot-info {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .modal-foot-info b {
+    color: var(--gold);
+    font-weight: 500;
+  }
+  .modal-foot-buttons {
+    display: flex;
+    gap: 10px;
+  }
+  .modal-foot .btn {
+    width: auto;
+    min-width: 140px;
+    margin: 0;
+  }
+
+  /* 내 데미지 표시 */
+  .my-damage {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .my-damage .label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .my-damage .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    color: var(--gold-bright);
+    font-weight: 500;
+  }
+  .my-damage .ocr-raw {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* 공대원 리스트 */
+  .roster {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .empty .icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+  }
+
+  .member {
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    align-items: center;
+    gap: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s;
+  }
+  .member:hover { transform: translateX(2px); }
+  .member .rank {
+    font-family: 'Cinzel', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--gold-dim);
+    text-align: center;
+  }
+  .member.rank-1 .rank { color: var(--rank-1); text-shadow: 0 0 12px rgba(255, 215, 107, 0.4); }
+  .member.rank-2 .rank { color: var(--rank-2); }
+  .member.rank-3 .rank { color: var(--rank-3); }
+  .member .info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .member .nick {
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .member.me .nick::after {
+    content: 'YOU';
+    margin-left: 8px;
+    font-family: 'Cinzel', serif;
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--gold);
+    border: 1px solid var(--gold-dim);
+    padding: 2px 5px;
+  }
+  .bar-track {
+    height: 4px;
+    background: var(--bg-deep);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--gold-dim), var(--gold-bright));
+    transition: width 0.4s ease-out;
+    border-radius: 2px;
+  }
+  .member .damage {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: var(--gold-bright);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .member .damage .pct {
+    display: block;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* 토스트 */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-elev);
+    border: 1px solid var(--gold-dim);
+    color: var(--text);
+    padding: 12px 24px;
+    font-size: 13px;
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 100;
+    pointer-events: none;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .toast.error { border-color: var(--danger); }
+  .toast.success { border-color: var(--success); }
+
+  /* 도움말 */
+  details {
+    margin-top: 20px;
+    border: 1px solid var(--border);
+    padding: 14px 18px;
+    background: var(--bg-panel);
+  }
+  details summary {
+    cursor: pointer;
+    font-family: 'Cinzel', serif;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  details[open] summary { margin-bottom: 14px; }
+  details ol {
+    padding-left: 22px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--text-dim);
+  }
+  details ol li::marker { color: var(--gold-dim); }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: -8px;
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+
+  /* 펄스 애니메이션 */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .pulsing { animation: pulse 1.5s ease-in-out infinite; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <div>
+        <h1>LOA · SHARE</h1>
+        <div class="tag">REAL-TIME DAMAGE RELAY</div>
+      </div>
+    </div>
+    <div class="status">
+      <div class="dot" id="statusDot"></div>
+      <span id="statusText">DISCONNECTED</span>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- 좌측: 컨트롤 패널 -->
+    <div>
+
+      <!-- 1. 공대 설정 -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">▸ Raid Setup</div>
+          <div class="panel-num">01</div>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label>닉네임</label>
+            <input type="text" id="nickname" placeholder="캐릭터명" maxlength="20" />
+          </div>
+          <div class="field">
+            <label>공대 아이디</label>
+            <input type="text" id="raidId" placeholder="공대원과 똑같이 입력" maxlength="30" />
+          </div>
+          <div class="hint">같은 공대 ID를 입력한 사람끼리만 데미지가 공유돼요.</div>
+        </div>
+      </div>
+
+      <!-- 2. 화면 공유 -->
+      <div class="panel" style="margin-top: 20px;">
+        <div class="panel-head">
+          <div class="panel-title">▸ Screen Capture</div>
+          <div class="panel-num">02</div>
+        </div>
+        <div class="panel-body">
+          <div class="capture-area" id="captureArea">
+            <video id="video" autoplay muted playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="placeholder">화면 공유 대기 중</div>
+            <div class="selection-overlay" id="selectionOverlay"></div>
+          </div>
+          <button class="btn" id="btnShareScreen">화면 공유 시작</button>
+          <button class="btn" id="btnSelectArea" disabled>큰 화면으로 영역 선택</button>
+          <div class="hint">버튼을 누르면 큰 모달이 열려요. 거기서 데미지 숫자를 정확하게 드래그할 수 있습니다.</div>
+        </div>
+      </div>
+
+      <!-- 3. 공유 시작 -->
+      <div class="panel" style="margin-top: 20px;">
+        <div class="panel-head">
+          <div class="panel-title">▸ Broadcast</div>
+          <div class="panel-num">03</div>
+        </div>
+        <div class="panel-body">
+          <div class="my-damage">
+            <div class="label">내 데미지</div>
+            <div class="value" id="myDamage">—</div>
+            <div class="ocr-raw" id="ocrRaw"></div>
+          </div>
+          <button class="btn primary" id="btnStart" disabled>데미지 공유 시작</button>
+          <button class="btn danger" id="btnStop" disabled>공유 중지</button>
+        </div>
+      </div>
+
+      <!-- 4. 디스코드 -->
+      <div class="panel" style="margin-top: 20px;">
+        <div class="panel-head">
+          <div class="panel-title">▸ Discord Relay</div>
+          <div class="panel-num">04</div>
+        </div>
+        <div class="panel-body">
+          <div class="field">
+            <label>웹훅 URL (선택)</label>
+            <input type="text" id="webhook" placeholder="https://discord.com/api/webhooks/..." />
+          </div>
+          <button class="btn" id="btnDiscord">현재 순위 디스코드에 박제</button>
+          <div class="hint">디스코드 채널 설정 → 연동 → 웹훅에서 URL을 만들 수 있어요.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 우측: 공대원 데미지 -->
+    <div>
+      <div class="panel" style="min-height: 400px;">
+        <div class="panel-head">
+          <div class="panel-title">▸ Party Damage</div>
+          <div class="panel-num" id="memberCount">0 / 8</div>
+        </div>
+        <div class="panel-body">
+          <div class="roster" id="roster">
+            <div class="empty">
+              <div class="icon">⚔</div>
+              공대 입장 시 공대원들의 데미지가 여기에 표시됩니다.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details>
+        <summary>▸ 사용 방법</summary>
+        <ol>
+          <li>닉네임과 공대 아이디를 입력합니다. <b>같은 공대원과 동일한 ID</b>를 써야 해요.</li>
+          <li>「화면 공유 시작」을 누르고 로스트아크 창을 선택합니다.</li>
+          <li>「데미지 영역 선택」을 누른 뒤, 전투분석기의 <b>내 데미지 숫자만</b> 드래그합니다 (좁게 선택!).</li>
+          <li>「데미지 공유 시작」을 누르면 1초마다 OCR로 숫자를 읽어 공대원들에게 전송돼요.</li>
+          <li>(선택) 디스코드 웹훅 URL을 넣으면 「박제」 버튼으로 현재 순위를 채널에 보낼 수 있습니다.</li>
+        </ol>
+      </details>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ===== 영역 선택 모달 ===== -->
+<div class="modal-overlay" id="selectionModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">▸ Select Damage Area</div>
+      </div>
+      <div class="modal-hint">전투분석기의 내 데미지 숫자를 좁게 드래그하세요</div>
+      <button class="modal-close" id="modalClose" title="닫기">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-capture" id="modalCapture">
+        <video id="modalVideo" autoplay muted playsinline></video>
+        <div class="modal-selection-layer" id="modalSelectionLayer"></div>
+        <!-- 확대 미리보기 -->
+        <div class="modal-zoom" id="modalZoom">
+          <div class="modal-zoom-title">▸ Zoom Preview</div>
+          <canvas id="modalZoomCanvas"></canvas>
+          <div class="modal-zoom-size" id="modalZoomSize">— × —</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="modal-foot-info" id="modalInfo">드래그하여 영역을 선택하세요</div>
+      <div class="modal-foot-buttons">
+        <button class="btn" id="modalCancel">취소</button>
+        <button class="btn primary" id="modalConfirm" disabled>이 영역으로 확정</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 라이브러리: Socket.IO 클라이언트, Tesseract.js OCR -->
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
