@@ -46,6 +46,9 @@ const els = {
   modalZoom: $('modalZoom'),
   modalZoomCanvas: $('modalZoomCanvas'),
   modalZoomSize: $('modalZoomSize'),
+  // ===== 디버그 =====
+  debugCanvas: $('debugCanvas'),
+  debugPanel: $('debugPanel'),
 };
 
 // localStorage에서 이전 입력 복원
@@ -334,10 +337,9 @@ async function initOcr() {
   // 한국어 + 영어 (로아의 "억" "만" 단위 인식용)
   ocrWorker = await Tesseract.createWorker(['kor', 'eng']);
   await ocrWorker.setParameters({
-    // 숫자, 쉼표, 점, 한글 단위(억/만/천), 영문 단위(K/M/B), 공백
-    tessedit_char_whitelist: '0123456789,.억만천KMB ',
-    // 단일 텍스트 라인으로 인식 (한 줄짜리 데미지 표시에 맞춤)
-    tessedit_pageseg_mode: '7',
+    // 화이트리스트 제거 (너무 엄격하면 글자를 통째로 누락함)
+    // PSM 6: "단일 균일 텍스트 블록" - 한글+숫자 혼합에 더 유연
+    tessedit_pageseg_mode: '6',
   });
   return ocrWorker;
 }
@@ -451,13 +453,25 @@ async function captureAndOcr() {
   // 적응형 임계값: 평균보다 약간 위쪽 (글자가 평균보다 밝다고 가정)
   const threshold = Math.max(80, Math.min(160, avgBright * 0.85));
 
+  // ⭐ 이진화 + 반전 (Tesseract는 흰 배경에 검은 글자를 훨씬 잘 읽음)
+  // 게임 화면은 보통 어두운 배경에 밝은 숫자 → 반전 필요
   for (let i = 0; i < imgData.data.length; i += 4) {
     const r = imgData.data[i], g = imgData.data[i + 1], b = imgData.data[i + 2];
     let v = (r * 0.3 + g * 0.59 + b * 0.11);
-    v = v < threshold ? 0 : 255;
+    // 밝은 픽셀(글자)을 검정으로, 어두운 픽셀(배경)을 흰색으로 반전
+    v = v < threshold ? 255 : 0;
     imgData.data[i] = imgData.data[i + 1] = imgData.data[i + 2] = v;
   }
   upCtx.putImageData(imgData, 0, 0);
+
+  // 디버그 캔버스에 처리된 이미지 표시 (사용자가 OCR이 보는 걸 확인 가능)
+  if (els.debugCanvas) {
+    const dbgCanvas = els.debugCanvas;
+    dbgCanvas.width = upCanvas.width;
+    dbgCanvas.height = upCanvas.height;
+    const dbgCtx = dbgCanvas.getContext('2d');
+    dbgCtx.drawImage(upCanvas, 0, 0);
+  }
 
   try {
     const result = await ocrWorker.recognize(upCanvas);
