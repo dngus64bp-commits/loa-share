@@ -446,6 +446,38 @@
     margin: 0;
   }
 
+  /* 단위 선택 버튼 */
+  .unit-selector {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    padding: 4px;
+    border-radius: 2px;
+  }
+  .unit-btn {
+    padding: 8px 6px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .unit-btn:hover {
+    color: var(--text);
+    background: rgba(201, 169, 110, 0.05);
+  }
+  .unit-btn.active {
+    background: var(--gold-dim);
+    color: var(--bg-deep);
+    font-weight: 700;
+  }
+
   /* 내 데미지 표시 */
   .my-damage {
     background: var(--bg-elev);
@@ -696,6 +728,16 @@
           <div class="panel-num">03</div>
         </div>
         <div class="panel-body">
+          <div class="field">
+            <label>데미지 단위 (선택 영역 기준)</label>
+            <div class="unit-selector">
+              <button type="button" class="unit-btn active" data-unit="auto">자동</button>
+              <button type="button" class="unit-btn" data-unit="raw">단위없음</button>
+              <button type="button" class="unit-btn" data-unit="man">만</button>
+              <button type="button" class="unit-btn" data-unit="eok">억</button>
+            </div>
+            <div class="hint" style="margin-top: 6px;">OCR이 한글을 못 읽을 때 사용하세요. 화면에 "1.22억"이 있으면 <b>억</b> 선택.</div>
+          </div>
           <div class="my-damage">
             <div class="label">내 데미지</div>
             <div class="value" id="myDamage">—</div>
