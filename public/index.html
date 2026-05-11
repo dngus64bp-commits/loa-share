@@ -478,6 +478,47 @@
     font-weight: 700;
   }
 
+  /* 디버그 패널 */
+  .debug-panel {
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-elev);
+    padding: 10px 14px;
+  }
+  .debug-panel summary {
+    cursor: pointer;
+    font-family: 'Cinzel', serif;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+  }
+  .debug-panel[open] summary {
+    margin-bottom: 10px;
+  }
+  .debug-body {
+    text-align: center;
+  }
+  .debug-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .debug-panel canvas {
+    max-width: 100%;
+    background: #000;
+    border: 1px solid var(--border);
+    image-rendering: pixelated;
+  }
+  .debug-hint {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+
   /* 내 데미지 표시 */
   .my-damage {
     background: var(--bg-elev);
@@ -743,6 +784,14 @@
             <div class="value" id="myDamage">—</div>
             <div class="ocr-raw" id="ocrRaw"></div>
           </div>
+          <details class="debug-panel" id="debugPanel">
+            <summary>▸ OCR 디버그 (문제 진단용)</summary>
+            <div class="debug-body">
+              <div class="debug-label">OCR이 실제로 보는 이미지:</div>
+              <canvas id="debugCanvas"></canvas>
+              <div class="debug-hint">이 이미지에서 숫자가 또렷이 보이는지 확인하세요.<br>흐릿하거나 잘렸으면 영역을 다시 선택하세요.</div>
+            </div>
+          </details>
           <button class="btn primary" id="btnStart" disabled>데미지 공유 시작</button>
           <button class="btn danger" id="btnStop" disabled>공유 중지</button>
         </div>
